@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Socket Server App</title>
+    <style>
+        /* Basic CSS styling with animations */
+        body, html {
+            font-family: Arial, sans-serif;
+            background-color: #282c34;
+            color: #ffffff;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .container {
+            text-align: center;
+            padding: 2rem;
+            background: rgba(0, 0, 0, 0.6);
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        h2 {
+            margin-bottom: 1rem;
+        }
+
+        input, textarea {
+            width: 80%;
+            padding: 0.5rem;
+            margin-bottom: 1rem;
+            border-radius: 5px;
+            border: none;
+        }
+
+        button {
+            padding: 0.7rem 1.2rem;
+            border: none;
+            background-color: #61dafb;
+            color: #000;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        button:hover {
+            background-color: #21a1f1;
+        }
+
+        #status, #chatStatus {
+            margin-top: 1rem;
+            color: #ff4d4d;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="start-view">
+            <h2>Start Socket Server</h2>
+            <input type="number" id="port" placeholder="Enter Port" required>
+            <button id="startBtn">Start Server</button>
+            <p id="status"></p>
+        </div>
+        <div id="chat-view" style="display:none;">
+            <h2>Send Message</h2>
+            <textarea id="message" placeholder="Enter your message"></textarea>
+            <button id="sendBtn">Send Message</button>
+            <p id="chatStatus"></p>
+        </div>
+    </div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            let socket;
+            const startBtn = document.getElementById('startBtn');
+            const sendBtn = document.getElementById('sendBtn');
+            const portInput = document.getElementById('port');
+            const messageInput = document.getElementById('message');
+            const status = document.getElementById('status');
+            const chatStatus = document.getElementById('chatStatus');
+            const startView = document.getElementById('start-view');
+            const chatView = document.getElementById('chat-view');
+
+            startBtn.addEventListener('click', () => {
+                const port = portInput.value;
+                if (!port) {
+                    status.textContent = 'Please enter a port number';
+                    return;
+                }
+                fetch(`/start/${port}`)
+                    .then((res) => {
+                        if (!res.ok) {
+                            throw new Error(`Server Error: ${res.statusText}`);
+                        }
+                        return res.text();
+                    })
+                    .then((data) => {
+                        status.textContent = data;
+                        startView.style.display = 'none';
+                        chatView.style.display = 'block';
+
+                        // Initialize socket only after server has started
+                        try {
+                            socket = io();
+                            socket.on('connect_error', (error) => {
+                                status.textContent = `Socket connection error: ${error.message}`;
+                            });
+                        } catch (error) {
+                            status.textContent = `Error initializing socket: ${error.message}`;
+                        }
+                    })
+                    .catch((err) => {
+                        status.textContent = `Error: ${err.message}`;
+                    });
+            });
+
+            sendBtn.addEventListener('click', () => {
+                const message = messageInput.value;
+                if (message.trim() === '') {
+                    chatStatus.textContent = 'Please enter a message';
+                    return;
+                }
+
+                try {
+                    socket.emit('message', message);
+                    chatStatus.textContent = 'Message sent!';
+                    messageInput.value = '';
+                } catch (error) {
+                    chatStatus.textContent = `Error sending message: ${error.message}`;
+                }
+            });
+
+            // Listen for messages from server
+            try {
+                socket.on('message', (msg) => {
+                    alert(`New message from server: ${msg}`);
+                });
+            } catch (error) {
+                status.textContent = `Error receiving message: ${error.message}`;
+            }
+        });
+    </script>
+</body>
+</html>
