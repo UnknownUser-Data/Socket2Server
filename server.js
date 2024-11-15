@@ -1,102 +1,70 @@
-// server.js
 const express = require('express');
 const http = require('http');
-const socketIo = require('socket.io');
+const { Server } = require('socket.io');
 
 const app = express();
-const httpServer = http.createServer(app);
+const server = http.createServer(app);
+const io = new Server(server);
 
-let io = null;
-let socketServer = null;
-let isSocketServerRunning = false;
-let activePort = null;
-
-// Serve static files
+// Serve static files from the 'public' directory
 app.use(express.static('public'));
 
-// Start Socket.IO server on a specific port
-async function startSocketServer(port) {
-    if (isSocketServerRunning) {
-        throw new Error(`Socket server is already running on port ${activePort}`);
-    }
+// Array to store logs for persistence and list of connected clients
+const logs = [];
+const connectedClients = {};
 
-    socketServer = http.createServer();
-    io = socketIo(socketServer);
-
-    io.on('connection', (socket) => {
-        console.log('Client connected:', socket.id);
-
-        socket.on('disconnect', () => {
-            console.log('Client disconnected:', socket.id);
-        });
-
-        socket.on('message', (msg) => {
-            console.log('Received message:', msg);
-            io.emit('message', msg);
-        });
-    });
-
-    return new Promise((resolve, reject) => {
-        socketServer.listen(port, (err) => {
-            if (err) {
-                reject(err.message);
-                return;
-            }
-            isSocketServerRunning = true;
-            activePort = port;
-            console.log(`Socket.IO server started on port ${port}`);
-            resolve();
-        });
-    });
+// Log function to add entries and broadcast logs to clients
+function log(message) {
+    const logEntry = `[${new Date().toLocaleTimeString()}] ${message}`;
+    logs.push(logEntry);
+    io.emit('log', logEntry);  // Send log entry to all clients
+    console.log(logEntry);  // Print on server console
 }
 
-// Stop Socket.IO server
-async function stopSocketServer() {
-    if (!isSocketServerRunning) {
-        throw new Error('Socket server is not running');
-    }
+// Handle new socket connections
+io.on('connection', (socket) => {
+    const clientId = socket.id;
+    const clientIp = socket.handshake.address;
+    connectedClients[clientId] = clientIp;
 
-    return new Promise((resolve, reject) => {
-        socketServer.close((err) => {
-            if (err) {
-                reject(err.message);
-                return;
-            }
-            isSocketServerRunning = false;
-            activePort = null;
-            io = null;
-            console.log('Socket.IO server stopped');
-            resolve();
-        });
+    // Log connection event and send updated client list to all clients
+    log(`Client connected: ID=${clientId}, IP=${clientIp}`);
+    io.emit('updateClients', connectedClients);
+
+    // Send all existing logs and current clients to the new client
+    socket.emit('initialLogs', logs);
+    socket.emit('updateClients', connectedClients);
+
+    // Handle message sending from UI
+    socket.on('sendMessage', (message) => {
+        if (message && message.trim()) {
+            log(`Message from Client ID=${clientId}: ${message}`);
+            io.emit('receiveMessage', message);
+        } else {
+            log(`Error: Empty message received from Client ID=${clientId}`);
+        }
     });
-}
 
-// API endpoint to start Socket.IO server dynamically
-app.get('/start-socket/:port', async (req, res) => {
-    const port = parseInt(req.params.port, 10);
-    if (!port || isNaN(port)) {
-        return res.status(400).send('Invalid port');
-    }
-    try {
-        await startSocketServer(port);
-        res.status(200).send(`Socket.IO server started on port ${port}`);
-    } catch (error) {
-        res.status(500).send(error.message);
-    }
+    // Handle client disconnect event
+    socket.on('disconnect', () => {
+        log(`Client disconnected: ID=${clientId}`);
+        delete connectedClients[clientId];
+        io.emit('updateClients', connectedClients);  // Update client list on UI
+    });
+
+    // Handle errors on the socket connection
+    socket.on('error', (err) => {
+        log(`Socket error from Client ID=${clientId}: ${err.message}`);
+    });
 });
 
-// API endpoint to stop Socket.IO server
-app.get('/stop-socket', async (req, res) => {
-    try {
-        await stopSocketServer();
-        res.status(200).send('Socket.IO server stopped');
-    } catch (error) {
-        res.status(500).send(error.message);
-    }
+// Handle server errors
+server.on('error', (err) => {
+    log(`Server error: ${err.message}`);
 });
 
-// Start main Express server on a fixed port (e.g., 3000)
-const mainPort = 3000;
-httpServer.listen(mainPort, () => {
-    console.log(`Main server running on port ${mainPort}`);
+// Start server
+const PORT = 3000;
+server.listen(PORT, () => {
+    log(`Server running on http://localhost:${PORT}`);
 });
