@@ -1,17 +1,17 @@
 {
-  "name": "socket2server",
+  "dependencies": {
+    "express": "^4.21.1",
+    "socket.io": "^4.8.1"
+  },
+  "name": "socket",
   "version": "1.0.0",
   "main": "server.js",
+  "devDependencies": {},
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node server.js",
     "start": "node server.js"
   },
   "author": "Karan Kumar",
   "license": "ISC",
-  "description": "",
-  "dependencies": {
-    "socket.io": "^4.8.1",
-    "express": "^4.21.0",
-    "http": "^0.0.1-security"
-  }
+  "description": ""
 }
